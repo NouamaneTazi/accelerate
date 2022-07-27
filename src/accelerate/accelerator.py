@@ -952,7 +952,8 @@ class Accelerator:
                 if self.gradient_state.end_of_dataloader:
                     # Last batch needs to be truncated on distributed systems as it contains additional samples
                     def _adjust_samples(tensor):
-                        return tensor[: dataloader.total_dataset_length - self.gradient_state.samples_seen]
+                        samples_seen = sum(self.gather(self.gradient_state.samples_seen))
+                        return tensor[: dataloader.total_dataset_length - samples_seen]
 
                     return recursively_apply(_adjust_samples, tensor)
                 else:

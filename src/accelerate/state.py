@@ -267,7 +267,7 @@ class GradientState:
         if not getattr(self, "initialized", False):
             self.sync_gradients = True
             self.end_of_dataloader = False
-            self.samples_seen = 0
+            self.samples_seen = torch.tensor([], device="cpu")
         self.initialized = True
 
     def __repr__(self):
@@ -287,8 +287,8 @@ class GradientState:
 
     def _set_samples_seen(self, samples_seen):
         "Private function that sets the number of samples iterated over. Users should not have to call this."
-        self.samples_seen = samples_seen
+        self.samples_seen = torch.cat((self.samples_seen, samples_seen))
 
     def _iterate_samples_seen(self, iteration: int = 1):
         "Private function that iterates the number of samples seen by an iteration. Users should not have to call this."
-        self._set_samples_seen(self.samples_seen + iteration)
+        self._set_samples_seen(iteration)

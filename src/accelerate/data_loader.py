@@ -138,6 +138,10 @@ class BatchSamplerShard(BatchSampler):
         self.batch_size = batch_sampler.batch_size
         self.drop_last = batch_sampler.drop_last
 
+    @property
+    def total_length(self):
+        return len(self.batch_sampler)
+
     def __len__(self):
         if self.split_batches:
             return len(self.batch_sampler)
@@ -365,7 +369,10 @@ class DataLoaderShard(DataLoader):
 
     @property
     def total_dataset_length(self):
-        return len(self.dataset)
+        if hasattr("total_length", self.dataset):
+            return self.dataset.total_length
+        else:
+            return len(self.dataset)
 
 
 class DataLoaderDispatcher(DataLoader):

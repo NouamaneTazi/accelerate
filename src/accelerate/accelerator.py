@@ -294,6 +294,7 @@ class Accelerator:
         # Start of internal step tracking
         self.step = 0
         self.gradient_state = GradientState()
+        self.gradient_state._set_dispatch_batches(self.dispatch_batches)
 
         # Internal references to the training objects
         self._optimizers = []
@@ -943,9 +944,6 @@ class Accelerator:
             tensor (`torch.Tensor`, or a nested tuple/list/dictionary of `torch.Tensor`):
                 The tensors for calculating metrics across all processes.
         """
-        raise NotImplementedError(
-            "Currently there are a number of bugs with this method. You should use `Accelerator.gather()` and drop the samples yourself for the time being."
-        )
         tensor = self.gather(tensor)
         if self.use_distributed:
             if self.gradient_state.remainder == -1:

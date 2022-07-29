@@ -331,17 +331,17 @@ class DataLoaderShard(DataLoader):
         self.rng_types = rng_types
         self.generator = generator
         self.gradient_state = GradientState()
-
-    def __iter__(self):
-        if self.rng_types is not None:
-            synchronize_rng_states(self.rng_types, self.generator)
-        self.gradient_state._set_end_of_dataloader(False)
         try:
             length = getattr(self.dataset, "total_dataset_length", len(self.dataset))
             self.gradient_state._set_remainder(length % self.total_batch_size)
         except Exception:
             # We can safely pass because the default is -1
             pass
+
+    def __iter__(self):
+        if self.rng_types is not None:
+            synchronize_rng_states(self.rng_types, self.generator)
+        self.gradient_state._set_end_of_dataloader(False)
         dataloader_iter = super().__iter__()
         # We iterate one batch ahead to check when we are at the end
         try:
@@ -419,6 +419,12 @@ class DataLoaderDispatcher(DataLoader):
 
         self.gradient_state = GradientState()
         self.state = AcceleratorState()
+        try:
+            length = getattr(self.dataset, "total_dataset_length", len(self.dataset))
+            self.gradient_state._set_remainder(length % self.total_batch_size)
+        except Exception:
+            # We can safely pass because the default is -1
+            pass
 
     def _fetch_batches(self, iterator):
         batches, batch = None, None
@@ -463,11 +469,6 @@ class DataLoaderDispatcher(DataLoader):
 
     def __iter__(self):
         self.gradient_state._set_end_of_dataloader(False)
-        try:
-            length = getattr(self.dataset, "total_dataset_length", len(self.dataset))
-            self.gradient_state._set_remainder(length % self.batch_size)
-        except:
-            self.gradient_state._set_remainder(-1)
         main_iterator = None
         if self.state.process_index == 0:
             # We only iterate through the DataLoader on process 0.

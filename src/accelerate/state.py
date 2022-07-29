@@ -269,6 +269,7 @@ class GradientState:
             self.sync_gradients = True
             self.end_of_dataloader = False
             self.remainder = -1
+            self.dispatch_batches = False
         self.initialized = True
 
     def __repr__(self):
@@ -289,3 +290,6 @@ class GradientState:
     def _set_remainder(self, remainder):
         "Private function that sets the number of remaining samples at the end of the dataloader"
         self.remainder = remainder
+
+    def _set_dispatch_batches(self, dispatch_batches):
+        self.dispatch_batches = dispatch_batches

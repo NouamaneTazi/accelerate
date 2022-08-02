@@ -81,10 +81,11 @@ def main(
         # This should be able to run with dispatch_batches and the same code
         # For now passes if using `if not dispatch_batches` and running this script with `split_batches`
         if not dispatch_batches:
-            samples_seen += references.shape[0]
             if step == (len(dataloader) - 1):
                 preds = preds[: len(dataloader.dataset) - samples_seen]
                 references = references[: len(dataloader.dataset) - samples_seen]
+            else:
+                samples_seen += references.shape[0]
         metric.add_batch(predictions=preds, references=references)
     distributed = metric.compute()
 

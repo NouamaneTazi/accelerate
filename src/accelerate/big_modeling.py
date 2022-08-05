@@ -233,6 +233,15 @@ def dispatch_model(
     execution_device = {
         name: main_device if device in ["cpu", "disk"] else device for name, device in device_map.items()
     }
+
+    # skip device placement of inputs in pre_forward_hooks for hidden layers that are on the same device
+    skip_inputs_placement = {name: False for name in execution_device.keys()}
+    prev_device = None
+    for name, device in execution_device.items():
+        if name.startswith("transformer.h."):
+            if device == prev_device:
+                skip_inputs_placement[name] = True
+            prev_device = device
     offload = {name: device in ["cpu", "disk"] for name, device in device_map.items()}
     save_folder = offload_dir if len(disk_modules) > 0 else None
     if state_dict is not None or save_folder is not None:
@@ -243,6 +252,7 @@ def dispatch_model(
     attach_align_device_hook_on_blocks(
         model,
         execution_device=execution_device,
+        skip_inputs_placement=skip_inputs_placement,
         offload=offload,
         offload_buffers=offload_buffers,
         weights_map=weights_map,

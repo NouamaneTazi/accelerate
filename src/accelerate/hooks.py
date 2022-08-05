@@ -140,7 +140,7 @@ def add_hook_to_module(module: nn.Module, hook: ModelHook):
 
     @functools.wraps(old_forward)
     def new_forward(*args, **kwargs):
-        args, kwargs = module._hf_hook.pre_forward(module, *args, **kwargs)
+        args, kwargs = module._hf_hook.pre_forward(module, *args, **kwargs) #TODO: when this function returns, new kwargs are in cuda:0 and old ones in cpu
         if module._hf_hook.no_grad:
             with torch.no_grad():
                 output = old_forward(*args, **kwargs)
@@ -199,6 +199,7 @@ class AlignDevicesHook(ModelHook):
         execution_device: Optional[Union[int, str, torch.device]] = None,
         offload: bool = False,
         io_same_device: bool = False,
+        skip_inputs_placement: bool = False,
         weights_map: Optional[Mapping] = None,
         offload_buffers: bool = False,
         place_submodules: bool = False,
@@ -206,6 +207,7 @@ class AlignDevicesHook(ModelHook):
         self.execution_device = execution_device
         self.offload = offload
         self.io_same_device = io_same_device
+        self.skip_inputs_placement = skip_inputs_placement
         self.weights_map = weights_map
         self.offload_buffers = offload_buffers
         self.place_submodules = place_submodules
@@ -248,7 +250,8 @@ class AlignDevicesHook(ModelHook):
                 module, include_buffers=self.offload_buffers, recurse=self.place_submodules
             ):
                 set_module_tensor_to_device(module, name, self.execution_device, value=self.weights_map[name])
-
+        if self.skip_inputs_placement:
+            return args, kwargs
         return send_to_device(args, self.execution_device), send_to_device(kwargs, self.execution_device)
 
     def post_forward(self, module, output):
@@ -273,6 +276,7 @@ class AlignDevicesHook(ModelHook):
 def attach_execution_device_hook(
     module: torch.nn.Module,
     execution_device: Union[int, str, torch.device],
+    skip_inputs_placement: Optional[bool] = False,
     preload_module_classes: Optional[List[str]] = None,
 ):
     """
@@ -291,14 +295,14 @@ def attach_execution_device_hook(
             `dense.weight` and `dense.bias` are used in some operations instead of calling `dense` directly.
     """
     if not hasattr(module, "_hf_hook") and len(module.state_dict()) > 0:
-        add_hook_to_module(module, AlignDevicesHook(execution_device))
+        add_hook_to_module(module, AlignDevicesHook(execution_device, skip_inputs_placement=skip_inputs_placement)) #TODO: add skip_inputs_placement?
 
     # Break the recursion if we get to a preload module.
     if preload_module_classes is not None and module.__class__.__name__ in preload_module_classes:
         return
 
     for child in module.children():
-        attach_execution_device_hook(child, execution_device)
+        attach_execution_device_hook(child, execution_device, skip_inputs_placement=skip_inputs_placement)
 
 
 def attach_align_device_hook(
@@ -387,6 +391,7 @@ def remove_hook_from_submodules(module: nn.Module):
 def attach_align_device_hook_on_blocks(
     module: nn.Module,
     execution_device: Optional[Union[torch.device, Dict[str, torch.device]]] = None,
+    skip_inputs_placement: Optional[Union[bool, Dict[str, bool]]] = None,
     offload: Union[bool, Dict[str, bool]] = False,
     weights_map: Mapping = None,
     offload_buffers: bool = False,
@@ -441,12 +446,13 @@ def attach_align_device_hook_on_blocks(
     if module_name in execution_device and not offload[module_name]:
         hook = AlignDevicesHook(
             execution_device=execution_device[module_name],
+            skip_inputs_placement=skip_inputs_placement[module_name],
             offload_buffers=offload_buffers,
             io_same_device=(module_name == ""),
             place_submodules=True,
         )
         add_hook_to_module(module, hook)
-        attach_execution_device_hook(module, execution_device[module_name])
+        attach_execution_device_hook(module, execution_device[module_name], skip_inputs_placement[module_name])
     elif module_name in execution_device:
         attach_align_device_hook(
             module,
@@ -472,6 +478,7 @@ def attach_align_device_hook_on_blocks(
         attach_align_device_hook_on_blocks(
             child,
             execution_device=execution_device,
+            skip_inputs_placement=skip_inputs_placement,
             offload=offload,
             weights_map=weights_map,
             offload_buffers=offload_buffers,
